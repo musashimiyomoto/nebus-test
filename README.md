@@ -10,8 +10,8 @@ REST API for Organizations Directory built with FastAPI, SQLAlchemy, and Postgre
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd organizations-directory-api
+git clone https://github.com/musashimiyomoto/nebus-test.git
+cd nebus-test
 ```
 
 2. Create an environment file:
@@ -24,7 +24,7 @@ cp .env.sample .env
 
 4. Start the application with Docker Compose:
 ```bash
-docker-compose up -d
+docker compose up --build
 ```
 
 5. Access the API documentation:
