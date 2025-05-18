@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from geopy.distance import geodesic
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,12 +60,12 @@ async def get_organizations_by_building(
         List of organizations in the building
 
     """
-    organizations = await session.execute(
+    result = await session.execute(
         statement=select(models.Organization).where(
             models.Organization.building_id == building_id
         )
     )
-    return map(Organization.model_validate, organizations.scalars().all())
+    return map(Organization.model_validate, result.scalars().all())
 
 
 @router.get(
@@ -97,7 +97,9 @@ async def get_organizations_by_activity(
         activity = activity_result.scalar_one_or_none()
 
         if not activity:
-            raise HTTPException(status_code=404, detail="Activity not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Activity not found"
+            )
 
         if activity.level < 3:
             children_result = await session.execute(
@@ -258,16 +260,18 @@ async def get_organization(
             .where(models.Organization.id == organization_id)
         )
     )
-    organization = result.scalar_one_or_none()
+    result = result.scalar_one_or_none()
 
-    if not organization:
-        raise HTTPException(status_code=404, detail="Organization not found")
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found"
+        )
 
     return OrganizationDetail(
-        id=organization.id,
-        name=organization.name,
-        building_id=organization.building_id,
-        building=organization.building,
-        phone_numbers=organization.phone_numbers,
-        activities=[activity.activity for activity in organization.activities],
+        id=result.id,
+        name=result.name,
+        building_id=result.building_id,
+        building=result.building,
+        phone_numbers=result.phone_numbers,
+        activities=[activity.activity for activity in result.activities],
     )
