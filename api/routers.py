@@ -1,12 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from geopy.distance import geodesic
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from api.dependencies import get_db_session, validate_api_key
 from api.schemas import Organization, OrganizationDetail, RadiusQuery, RectangleQuery
-from db import models
+from db.queries import (
+    get_organization_detail,
+    get_organizations_by_activity_id,
+    get_organizations_by_building_id,
+    get_organizations_by_name,
+    get_organizations_by_radius,
+    get_organizations_by_rectangle,
+)
 
 router = APIRouter(prefix="/organizations", dependencies=[Depends(validate_api_key)])
 
@@ -33,14 +37,15 @@ async def get_organizations(
         List of organizations
 
     """
-    query = select(models.Organization)
-
-    if name:
-        query = query.where(models.Organization.name.ilike(f"%{name}%"))
-
-    result = await session.execute(query.offset(skip).limit(limit))
-
-    return map(Organization.model_validate, result.scalars().all())
+    return map(
+        Organization.model_validate,
+        await get_organizations_by_name(
+            session=session,
+            name=name,
+            skip=skip,
+            limit=limit,
+        ),
+    )
 
 
 @router.get(
@@ -48,7 +53,10 @@ async def get_organizations(
     description="Get organizations in a specific building",
 )
 async def get_organizations_by_building(
-    building_id: int, session: AsyncSession = Depends(get_db_session)
+    building_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    session: AsyncSession = Depends(get_db_session),
 ) -> list[Organization]:
     """Get organizations in a specific building
 
@@ -60,12 +68,15 @@ async def get_organizations_by_building(
         List of organizations in the building
 
     """
-    result = await session.execute(
-        statement=select(models.Organization).where(
-            models.Organization.building_id == building_id
-        )
+    return map(
+        Organization.model_validate,
+        await get_organizations_by_building_id(
+            session=session,
+            building_id=building_id,
+            skip=skip,
+            limit=limit,
+        ),
     )
-    return map(Organization.model_validate, result.scalars().all())
 
 
 @router.get(
@@ -74,6 +85,8 @@ async def get_organizations_by_building(
 )
 async def get_organizations_by_activity(
     activity_id: int,
+    skip: int = 0,
+    limit: int = 100,
     include_children: bool = True,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[Organization]:
@@ -88,63 +101,16 @@ async def get_organizations_by_activity(
         List of organizations with the activity
 
     """
-    if include_children:
-        activity_ids = [activity_id]
-
-        activity_result = await session.execute(
-            select(models.Activity).where(models.Activity.id == activity_id)
-        )
-        activity = activity_result.scalar_one_or_none()
-
-        if not activity:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Activity not found"
-            )
-
-        if activity.level < 3:
-            children_result = await session.execute(
-                select(models.Activity).where(models.Activity.parent_id == activity_id)
-            )
-            children = children_result.scalars().all()
-            activity_ids.extend([child.id for child in children])
-
-            if activity.level == 1:
-                for child in children:
-                    grandchildren_result = await session.execute(
-                        select(models.Activity).where(
-                            models.Activity.parent_id == child.id
-                        )
-                    )
-
-                    activity_ids.extend(
-                        [
-                            grandchild.id
-                            for grandchild in grandchildren_result.scalars().all()
-                        ]
-                    )
-
-        query = (
-            select(models.Organization)
-            .join(
-                models.OrganizationActivity,
-                models.Organization.id == models.OrganizationActivity.organization_id,
-            )
-            .where(models.OrganizationActivity.activity_id.in_(activity_ids))
-            .distinct()
-        )
-    else:
-        query = (
-            select(models.Organization)
-            .join(
-                models.OrganizationActivity,
-                models.Organization.id == models.OrganizationActivity.organization_id,
-            )
-            .where(models.OrganizationActivity.activity_id == activity_id)
-        )
-
-    result = await session.execute(query)
-
-    return map(Organization.model_validate, result.scalars().all())
+    return map(
+        Organization.model_validate,
+        await get_organizations_by_activity_id(
+            session=session,
+            activity_id=activity_id,
+            include_children=include_children,
+            skip=skip,
+            limit=limit,
+        ),
+    )
 
 
 @router.post(
@@ -152,7 +118,10 @@ async def get_organizations_by_activity(
     description="Search organizations within a radius from a center point",
 )
 async def search_organizations_by_radius(
-    query: RadiusQuery, session: AsyncSession = Depends(get_db_session)
+    query: RadiusQuery,
+    skip: int = 0,
+    limit: int = 100,
+    session: AsyncSession = Depends(get_db_session),
 ) -> list[Organization]:
     """Search organizations within a radius from a center point
 
@@ -164,28 +133,17 @@ async def search_organizations_by_radius(
         List of organizations within the radius
 
     """
-    buildings_result = await session.execute(select(models.Building))
-
-    building_ids = []
-    for building in buildings_result.scalars().all():
-        distance = geodesic(
-            (query.center.latitude, query.center.longitude),
-            (building.latitude, building.longitude),
-        ).kilometers
-
-        if distance <= query.radius:
-            building_ids.append(building.id)
-
-    if not building_ids:
-        return []
-
-    result = await session.execute(
-        select(models.Organization).where(
-            models.Organization.building_id.in_(building_ids)
-        )
+    return map(
+        Organization.model_validate,
+        await get_organizations_by_radius(
+            session=session,
+            center_latitude=query.center.latitude,
+            center_longitude=query.center.longitude,
+            radius=query.radius,
+            skip=skip,
+            limit=limit,
+        ),
     )
-
-    return map(Organization.model_validate, result.scalars().all())
 
 
 @router.post(
@@ -193,7 +151,10 @@ async def search_organizations_by_radius(
     description="Search organizations within a rectangular area",
 )
 async def search_organizations_by_rectangle(
-    query: RectangleQuery, session: AsyncSession = Depends(get_db_session)
+    query: RectangleQuery,
+    skip: int = 0,
+    limit: int = 100,
+    session: AsyncSession = Depends(get_db_session),
 ) -> list[Organization]:
     """Search organizations within a rectangular area
 
@@ -205,26 +166,18 @@ async def search_organizations_by_rectangle(
         List of organizations within the rectangle
 
     """
-    buildings_result = await session.execute(
-        select(models.Building.id).where(
-            (models.Building.latitude >= query.min_latitude)
-            & (models.Building.latitude <= query.max_latitude)
-            & (models.Building.longitude >= query.min_longitude)
-            & (models.Building.longitude <= query.max_longitude)
-        )
+    return map(
+        Organization.model_validate,
+        await get_organizations_by_rectangle(
+            session=session,
+            min_latitude=query.min_latitude,
+            max_latitude=query.max_latitude,
+            min_longitude=query.min_longitude,
+            max_longitude=query.max_longitude,
+            skip=skip,
+            limit=limit,
+        ),
     )
-    building_ids = buildings_result.scalars().all()
-
-    if not building_ids:
-        return []
-
-    result = await session.execute(
-        select(models.Organization).where(
-            models.Organization.building_id.in_(building_ids)
-        )
-    )
-
-    return map(Organization.model_validate, result.scalars().all())
 
 
 @router.get(
@@ -247,31 +200,19 @@ async def get_organization(
         HTTPException: If organization not found
 
     """
-    result = await session.execute(
-        (
-            select(models.Organization)
-            .options(
-                selectinload(models.Organization.building),
-                selectinload(models.Organization.phone_numbers),
-                selectinload(models.Organization.activities).selectinload(
-                    models.OrganizationActivity.activity
-                ),
-            )
-            .where(models.Organization.id == organization_id)
-        )
+    organization = await get_organization_detail(
+        session=session, organization_id=organization_id
     )
-    result = result.scalar_one_or_none()
-
-    if not result:
+    if not organization:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found"
         )
 
     return OrganizationDetail(
-        id=result.id,
-        name=result.name,
-        building_id=result.building_id,
-        building=result.building,
-        phone_numbers=result.phone_numbers,
-        activities=[activity.activity for activity in result.activities],
+        id=organization.id,
+        name=organization.name,
+        building_id=organization.building_id,
+        building=organization.building,
+        phone_numbers=organization.phone_numbers,
+        activities=[activity.activity for activity in organization.activities],
     )
