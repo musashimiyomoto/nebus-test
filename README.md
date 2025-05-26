@@ -16,7 +16,7 @@ cd nebus-test
 
 2. Create an environment file:
 ```bash
-cp .env.sample .env
+cp .env.example .env
 ```
 
 3. Edit the `.env` file with your settings.
