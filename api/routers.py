@@ -1,8 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_db_session, validate_api_key
-from api.schemas import Organization, OrganizationDetail, RadiusQuery, RectangleQuery
+from api.schemas import (
+    Organization,
+    OrganizationByActivityQuery,
+    OrganizationByBuildingQuery,
+    OrganizationByNameQuery,
+    OrganizationByRadiusQuery,
+    OrganizationByRectangleQuery,
+    OrganizationDetail,
+)
 from db.queries import (
     get_organization_detail,
     get_organizations_by_activity_id,
@@ -19,32 +27,13 @@ router = APIRouter(prefix="/organizations", dependencies=[Depends(validate_api_k
     path="/",
     description="Get organizations with optional name filter",
 )
-async def get_organizations(
-    skip: int = 0,
-    limit: int = 100,
-    name: str | None = None,
+async def get_organizations_by_name(
+    params: OrganizationByNameQuery = Query(),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[Organization]:
-    """Get organizations with optional name filter
-
-    Args:
-        skip: Number of records to skip
-        limit: Maximum number of records to return
-        name: Optional name to filter organizations
-        session: Database session
-
-    Returns:
-        List of organizations
-
-    """
     return map(
         Organization.model_validate,
-        await get_organizations_by_name(
-            session=session,
-            name=name,
-            skip=skip,
-            limit=limit,
-        ),
+        await get_organizations_by_name(session=session, **params.model_dump()),
     )
 
 
@@ -53,29 +42,12 @@ async def get_organizations(
     description="Get organizations in a specific building",
 )
 async def get_organizations_by_building(
-    building_id: int,
-    skip: int = 0,
-    limit: int = 100,
+    params: OrganizationByBuildingQuery = Query(),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[Organization]:
-    """Get organizations in a specific building
-
-    Args:
-        building_id: ID of the building to filter by
-        session: Database session
-
-    Returns:
-        List of organizations in the building
-
-    """
     return map(
         Organization.model_validate,
-        await get_organizations_by_building_id(
-            session=session,
-            building_id=building_id,
-            skip=skip,
-            limit=limit,
-        ),
+        await get_organizations_by_building_id(session=session, **params.model_dump()),
     )
 
 
@@ -84,32 +56,12 @@ async def get_organizations_by_building(
     description="Get organizations with a specific activity",
 )
 async def get_organizations_by_activity(
-    activity_id: int,
-    skip: int = 0,
-    limit: int = 100,
-    include_children: bool = True,
+    params: OrganizationByActivityQuery = Query(),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[Organization]:
-    """Get organizations with a specific activity
-
-    Args:
-        activity_id: ID of the activity to filter by
-        include_children: Whether to include child activities
-        session: Database session
-
-    Returns:
-        List of organizations with the activity
-
-    """
     return map(
         Organization.model_validate,
-        await get_organizations_by_activity_id(
-            session=session,
-            activity_id=activity_id,
-            include_children=include_children,
-            skip=skip,
-            limit=limit,
-        ),
+        await get_organizations_by_activity_id(session=session, **params.model_dump()),
     )
 
 
@@ -118,31 +70,12 @@ async def get_organizations_by_activity(
     description="Search organizations within a radius from a center point",
 )
 async def search_organizations_by_radius(
-    query: RadiusQuery,
-    skip: int = 0,
-    limit: int = 100,
+    params: OrganizationByRadiusQuery = Query(),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[Organization]:
-    """Search organizations within a radius from a center point
-
-    Args:
-        query: Radius search parameters
-        session: Database session
-
-    Returns:
-        List of organizations within the radius
-
-    """
     return map(
         Organization.model_validate,
-        await get_organizations_by_radius(
-            session=session,
-            center_latitude=query.center.latitude,
-            center_longitude=query.center.longitude,
-            radius=query.radius,
-            skip=skip,
-            limit=limit,
-        ),
+        await get_organizations_by_radius(session=session, **params.model_dump()),
     )
 
 
@@ -151,32 +84,12 @@ async def search_organizations_by_radius(
     description="Search organizations within a rectangular area",
 )
 async def search_organizations_by_rectangle(
-    query: RectangleQuery,
-    skip: int = 0,
-    limit: int = 100,
+    params: OrganizationByRectangleQuery = Query(),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[Organization]:
-    """Search organizations within a rectangular area
-
-    Args:
-        query: Rectangle search parameters
-        session: Database session
-
-    Returns:
-        List of organizations within the rectangle
-
-    """
     return map(
         Organization.model_validate,
-        await get_organizations_by_rectangle(
-            session=session,
-            min_latitude=query.min_latitude,
-            max_latitude=query.max_latitude,
-            min_longitude=query.min_longitude,
-            max_longitude=query.max_longitude,
-            skip=skip,
-            limit=limit,
-        ),
+        await get_organizations_by_rectangle(session=session, **params.model_dump()),
     )
 
 
@@ -187,19 +100,6 @@ async def search_organizations_by_rectangle(
 async def get_organization(
     organization_id: int, session: AsyncSession = Depends(get_db_session)
 ) -> OrganizationDetail:
-    """Get detailed information about a specific organization
-
-    Args:
-        organization_id: ID of the organization to retrieve
-        session: Database session
-
-    Returns:
-        Detailed organization information
-
-    Raises:
-        HTTPException: If organization not found
-
-    """
     organization = await get_organization_detail(
         session=session, organization_id=organization_id
     )

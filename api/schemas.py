@@ -85,17 +85,33 @@ class OrganizationDetail(Organization):
 #########################
 
 
-class GeoPoint(BaseModel):
-    latitude: float = Field(default=..., description="Latitude", ge=-90, le=90)
-    longitude: float = Field(default=..., description="Longitude", ge=-180, le=180)
+class PaginationQuery(BaseModel):
+    skip: int = Field(default=0, description="Skip", ge=0)
+    limit: int = Field(default=100, description="Limit", gt=0)
 
 
-class RadiusQuery(BaseModel):
-    center: GeoPoint = Field(default=..., description="Center of the radius")
+class OrganizationByNameQuery(PaginationQuery):
+    name: str | None = Field(default=None, description="Name")
+
+
+class OrganizationByBuildingQuery(PaginationQuery):
+    building_id: int = Field(default=None, description="Building ID", ge=0)
+
+
+class OrganizationByActivityQuery(PaginationQuery):
+    activity_id: int = Field(default=None, description="Activity ID", ge=0)
+    include_children: bool = Field(default=True, description="Include children ?")
+
+
+class OrganizationByRadiusQuery(PaginationQuery):
+    center_latitude: float = Field(default=..., description="Latitude", ge=-90, le=90)
+    center_longitude: float = Field(
+        default=..., description="Longitude", ge=-180, le=180
+    )
     radius: float = Field(default=..., description="Search radius in kilometers", gt=0)
 
 
-class RectangleQuery(BaseModel):
+class OrganizationByRectangleQuery(PaginationQuery):
     min_latitude: float = Field(
         default=..., description="Minimum latitude", ge=-90, le=90
     )

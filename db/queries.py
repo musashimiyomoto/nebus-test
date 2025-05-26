@@ -7,10 +7,10 @@ from db import models
 
 
 async def get_organizations_by_name(
+    skip: int,
+    limit: int,
+    name: str | None,
     session: AsyncSession,
-    name: str | None = None,
-    skip: int = 0,
-    limit: int = 100,
 ) -> list[models.Organization]:
     query = select(models.Organization)
     if name:
@@ -20,7 +20,7 @@ async def get_organizations_by_name(
 
 
 async def get_organizations_by_building_id(
-    session: AsyncSession, building_id: int, skip: int = 0, limit: int = 100
+    skip: int, limit: int, building_id: int, session: AsyncSession
 ) -> list[models.Organization]:
     result = await session.execute(
         select(models.Organization)
@@ -32,11 +32,11 @@ async def get_organizations_by_building_id(
 
 
 async def get_organizations_by_activity_id(
-    session: AsyncSession,
+    skip: int,
+    limit: int,
     activity_id: int,
-    include_children: bool = True,
-    skip: int = 0,
-    limit: int = 100,
+    include_children: bool,
+    session: AsyncSession,
 ) -> list[models.Organization]:
     query = select(models.Organization).join(
         models.OrganizationActivity,
@@ -82,12 +82,12 @@ async def get_organizations_by_activity_id(
 
 
 async def get_organizations_by_radius(
-    session: AsyncSession,
+    skip: int,
+    limit: int,
     center_latitude: float,
     center_longitude: float,
     radius: float,
-    skip: int = 0,
-    limit: int = 100,
+    session: AsyncSession,
 ) -> list[models.Organization]:
     buildings_result = await session.execute(select(models.Building))
     building_ids = []
@@ -110,13 +110,13 @@ async def get_organizations_by_radius(
 
 
 async def get_organizations_by_rectangle(
-    session: AsyncSession,
+    skip: int,
+    limit: int,
     min_latitude: float,
     max_latitude: float,
     min_longitude: float,
     max_longitude: float,
-    skip: int = 0,
-    limit: int = 100,
+    session: AsyncSession,
 ) -> list[models.Organization]:
     buildings_result = await session.execute(
         select(models.Building.id).where(
@@ -139,7 +139,7 @@ async def get_organizations_by_rectangle(
 
 
 async def get_organization_detail(
-    session: AsyncSession, organization_id: int
+    organization_id: int, session: AsyncSession
 ) -> models.Organization | None:
     result = await session.execute(
         (
